@@ -64,12 +64,45 @@ kubectl get node <nodeName> -o jsonpath='{.spec.taints}{"\n"}{.metadata.labels.r
 | **Cordon** | **`spec.unschedulable`** via drain helper. |
 | **Label** | **`remediation.medik8s.io/exclude-from-remediation=true`**. |
 
+### OpenShift: MachineConfigPool shows **Updating**
+
+While a node is in maintenance, its **MachineConfigPool** reports **`UPDATED=False`** / **`UPDATING=True`** ("All nodes are updating to rendered-…"), although no MachineConfig changed. This is expected: the **Machine Config Operator** counts only schedulable nodes as ready, so a cordoned node makes the pool look like a rollout is in progress.
+
+| Signal | During maintenance |
+|--------|--------------------|
+| **`UPDATEDMACHINECOUNT`** | Unchanged, equals **`MACHINECOUNT`**: the node is still on the pool's rendered config. |
+| **`READYMACHINECOUNT`** | One less per node in maintenance. |
+| **Node annotations** | **`machineconfiguration.openshift.io/currentConfig`** = **`desiredConfig`**, **`state=Done`**. |
+| **Condition change** | **`Updating=True`** within seconds of the **`NodeMaintenance`** creation. |
+
+Why (MCO **`pkg/controller/common/layered_node_state.go`** and **`pkg/controller/node/status.go`**):
+
+- **`CheckNodeReady`** returns an error when **`node.spec.unschedulable`** is true, so the node is neither *ready* nor *available* (**`IsUnavailableForUpdate`**).
+- The pool is **Updated** only if **all** nodes are updated **and** ready **and** none is unavailable; otherwise an unpaused pool gets **`Updating=True`**.
+
+The MCO cordons nodes itself while applying MachineConfigs, so it treats any cordoned node as being updated. Cordoning a node by hand has the same effect.
+
+**Impact:**
+
+- The cordoned node uses up the pool's **`maxUnavailable`** (default **1**). A **new** MachineConfig change for that pool, or the pool's part of a **cluster upgrade**, waits until the maintenance ends.
+- The console **Overview** may show the pool as updating.
+
+**Resolve:** nothing to do. NMO can't avoid this without not cordoning. Deleting the **`NodeMaintenance`** uncordons the node and the pool returns to **`Updated=True`**. Plan maintenances and MachineConfig changes or upgrades so they don't overlap, or raise the pool's **`maxUnavailable`** if both must run at once.
+
+To confirm the pool isn't actually rolling out a new config:
+
+```bash
+oc get mcp
+oc get node <nodeName> -o jsonpath='{.metadata.annotations.machineconfiguration\.openshift\.io/currentConfig}{"\n"}{.metadata.annotations.machineconfiguration\.openshift\.io/desiredConfig}{"\n"}{.metadata.annotations.machineconfiguration\.openshift\.io/state}{"\n"}'
+```
+
 ## Debugging checklist
 
 1. **Webhook** blocking create? — node exists, no duplicate **nm**, OpenShift **etcd** guard for masters.  
 2. **Lease** errors? — **`leases.coordination.k8s.io`**, competing operators.  
 3. **Drain** looping? — PDBs, **forbidden** evictions, terminating pods, **30s** timeout.  
 4. **Stuck terminating CR?** — Operator logs, finalizer, RBAC **update** on **NodeMaintenance**.  
+5. **MachineConfigPool Updating?** — expected while a node is cordoned, see **OpenShift: MachineConfigPool shows Updating** above.  
 
 ## Related pieces
 
