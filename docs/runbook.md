@@ -16,7 +16,7 @@ Commands and fields for **NodeMaintenance** day-2 ops. Behaviour details: **`../
 | Topic | Note |
 |-------|------|
 | **Health / readiness** | Default probe bind **`:8081`** (`cmd/main.go`). |
-| **Metrics** | **`--metrics-bind-address`** default **`:8443`**; secured (TLS + Kubernetes bearer-token authn/authz via controller-runtime filters) — same pattern as NHC/SNR. |
+| **Metrics** | **`--metrics-bind-address`** default **`:8443`**; secured (TLS + Kubernetes bearer-token authn/authz via controller-runtime filters) — same pattern as NHC/SNR. **`nmo_node_in_maintenance{node,nodemaintenance,reason}`** is **1** per node in maintenance. |
 | **Webhook** | TLS under **`/apiserver.local.config/certificates`** when OLM injects certs; port **9443** default. On OpenShift, TLS settings (both metrics and webhook) also follow the cluster's **`APIServer`** TLS profile, and the process restarts if that profile changes. |
 | **Leader election** | **`--leader-elect`** defaults **false** in code; CSV may override. ID **`135b1886.medik8s.io`**. |
 
@@ -95,6 +95,23 @@ To confirm the pool isn't actually rolling out a new config:
 oc get mcp
 oc get node <nodeName> -o jsonpath='{.metadata.annotations.machineconfiguration\.openshift\.io/currentConfig}{"\n"}{.metadata.annotations.machineconfiguration\.openshift\.io/desiredConfig}{"\n"}{.metadata.annotations.machineconfiguration\.openshift\.io/state}{"\n"}'
 ```
+
+## Alerts
+
+### NodeInMaintenance
+
+| | |
+|---|---|
+| **Severity** | **warning** (OpenShift platform alert, fires within about **20s**: no pending period, **10s** scrape and rule evaluation intervals) |
+| **Meaning** | A **`NodeMaintenance`** CR for the node is **Running** or **Succeeded**: the node is cordoned, tainted, drained and excluded from automated remediation. The description links to the node and shows the **reason**; the **`NodeMaintenance`** name is in the **`nodemaintenance`** alert label. |
+| **Impact** | Reduced cluster capacity; no new workloads are scheduled on the node. Expected during planned maintenance. |
+| **Resolve** | When the maintenance is done, end it with **`oc delete nm <nodemaintenance>`**. The node is uncordoned and the alert clears. |
+
+```bash
+oc get nm -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,REASON:.spec.reason,PHASE:.status.phase
+```
+
+If the alert doesn't fire on OpenShift, check that the operator namespace has the **`openshift.io/cluster-monitoring=true`** label and that the **ServiceMonitor** target is up (**Observe → Targets**).
 
 ## Debugging checklist
 

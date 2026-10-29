@@ -10,6 +10,9 @@ import (
 	"github.com/medik8s/common/pkg/lease"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -19,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/medik8s/node-maintenance-operator/v5/api/v1beta1"
+	"github.com/medik8s/node-maintenance-operator/v5/internal/metrics"
 	utils "github.com/medik8s/node-maintenance-operator/v5/pkg/utils"
 )
 
@@ -215,6 +219,11 @@ var _ = Describe("Node Maintenance", func() {
 				Expect(maintenance.Status.ErrorOnLeaseCount).To(Equal(0))
 				verifyEvent(corev1.EventTypeNormal, utils.EventReasonSucceedMaintenance, utils.EventMessageSucceedMaintenance)
 
+				By("Check node in maintenance metric")
+				Eventually(func() float64 {
+					return nodeInMaintenanceMetricValue(nm)
+				}, defaultTimeout, defaultInterval).Should(Equal(float64(1)))
+
 				By("Check whether node was cordoned")
 				node := &corev1.Node{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: nm.Spec.NodeName}, node)).To(Succeed())
@@ -236,6 +245,12 @@ var _ = Describe("Node Maintenance", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: nm.Spec.NodeName}, node)).NotTo(HaveOccurred())
 				_, exist := node.Labels[commonLabels.ExcludeFromRemediation]
 				Expect(exist).To(BeFalse())
+
+				By("Check node in maintenance metric was removed")
+				Eventually(func() int {
+					return nodeInMaintenanceSeriesCount()
+				}, defaultTimeout, defaultInterval).Should(Equal(0))
+
 			})
 		})
 		When("nm CR is invalid for a missing node", func() {
@@ -261,6 +276,9 @@ var _ = Describe("Node Maintenance", func() {
 				verifyEvent(corev1.EventTypeNormal, utils.EventReasonBeginMaintenance, utils.EventMessageBeginMaintenance)
 				verifyEvent(corev1.EventTypeWarning, utils.EventReasonFailedMaintenance, utils.EventMessageFailedMaintenance)
 				verifyNoEvent(corev1.EventTypeNormal, utils.EventReasonSucceedMaintenance, utils.EventMessageSucceedMaintenance)
+
+				By("Check node in maintenance metric is not reported for a failed maintenance")
+				Expect(nodeInMaintenanceSeriesCount()).To(Equal(0))
 			})
 		})
 		When("lease is already held by another entity", func() {
@@ -469,6 +487,11 @@ var _ = Describe("Node Maintenance", func() {
 
 				By("Verifying LastError mentions lease extension failure")
 				Expect(maintenance.Status.LastError).To(ContainSubstring("maintenance failed: lease could not be extended"))
+
+				By("Verifying node in maintenance metric was removed for the failed maintenance")
+				Eventually(func() int {
+					return nodeInMaintenanceSeriesCount()
+				}, defaultTimeout, defaultInterval).Should(Equal(0))
 			})
 		})
 	})
@@ -558,6 +581,30 @@ func cleanupPod(ctx context.Context, pod *corev1.Pod) {
 			}, "4s", "100ms").Should(BeNil(), "pod should be deleted")
 		}
 	}
+}
+
+// nodeInMaintenanceMetricValue returns the node in maintenance metric value of the given nm CR, or 0 if it isn't reported
+func nodeInMaintenanceMetricValue(nm *v1beta1.NodeMaintenance) float64 {
+	ch := make(chan prometheus.Metric, 100)
+	metrics.NodeInMaintenance.Collect(ch)
+	close(ch)
+	for m := range ch {
+		pb := &dto.Metric{}
+		ExpectWithOffset(1, m.Write(pb)).To(Succeed())
+		labels := map[string]string{}
+		for _, l := range pb.GetLabel() {
+			labels[l.GetName()] = l.GetValue()
+		}
+		if labels["node"] == nm.Spec.NodeName && labels["nodemaintenance"] == nm.Name && labels["reason"] == nm.Spec.Reason {
+			return pb.GetGauge().GetValue()
+		}
+	}
+	return 0
+}
+
+// nodeInMaintenanceSeriesCount returns the number of reported node in maintenance series
+func nodeInMaintenanceSeriesCount() int {
+	return testutil.CollectAndCount(metrics.NodeInMaintenance)
 }
 
 func getTestNM(crName, nodeName string) *v1beta1.NodeMaintenance {

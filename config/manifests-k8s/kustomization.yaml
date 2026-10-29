@@ -3,3 +3,4 @@ resources:
 
 patches:
   - path: seccomp_patch.yaml
+  - path: remove_openshift_only_patch.yaml

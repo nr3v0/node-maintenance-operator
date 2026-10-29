@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    control-plane: controller-manager
+    node-maintenance-operator: ""
+  name: node-maintenance-operator-controller-manager-alerts
+spec:
+  groups:
+  - interval: 10s
+    name: node-maintenance
+    rules:
+    - alert: NodeInMaintenance
+      annotations:
+        description: 'Node {{ $labels.node }} is in maintenance, reason: "{{ $labels.reason
+          }}". The node is cordoned and drained: no new workloads will be scheduled
+          on it, and it is excluded from automated remediation, until its NodeMaintenance
+          resource is deleted.'
+        runbook_url: https://github.com/medik8s/node-maintenance-operator/blob/main/docs/runbook.md#nodeinmaintenance
+        summary: Node is in maintenance.
+      expr: max by (node, nodemaintenance, reason) (nmo_node_in_maintenance) == 1
+      labels:
+        severity: warning

@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/medik8s/node-maintenance-operator/v5/api/v1beta1"
+	"github.com/medik8s/node-maintenance-operator/v5/internal/metrics"
 	"github.com/medik8s/node-maintenance-operator/v5/pkg/utils"
 )
 
@@ -116,12 +117,16 @@ func (r *NodeMaintenanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			r.logger.Info("NodeMaintenance not found", "name", req.NamespacedName)
+			metrics.ClearNodeInMaintenance(req.Name)
 			return emptyResult, nil
 		}
 		// Error reading the object - requeue the request.
 		r.logger.Info("Error reading the request object, requeuing.")
 		return emptyResult, err
 	}
+	// update the node in maintenance metric based on the final state of this reconcile
+	defer updateNodeInMaintenanceMetric(nm)
+
 	drainer, err := createDrainer(ctx, r.MgrConfig)
 	if err != nil {
 		return emptyResult, err
@@ -501,6 +506,21 @@ func (r *NodeMaintenanceReconciler) onReconcileErrorWithRequeue(ctx context.Cont
 
 func (r *NodeMaintenanceReconciler) onReconcileError(ctx context.Context, nm *v1beta1.NodeMaintenance, drainer *drain.Helper, err error) (ctrl.Result, error) {
 	return r.onReconcileErrorWithRequeue(ctx, nm, drainer, err, nil)
+}
+
+// updateNodeInMaintenanceMetric reports the node as in maintenance while the NodeMaintenance is running or succeeded,
+// and clears it when the NodeMaintenance is being deleted or has failed
+func updateNodeInMaintenanceMetric(nm *v1beta1.NodeMaintenance) {
+	if !nm.DeletionTimestamp.IsZero() {
+		metrics.ClearNodeInMaintenance(nm.Name)
+		return
+	}
+	switch nm.Status.Phase {
+	case v1beta1.MaintenanceRunning, v1beta1.MaintenanceSucceeded:
+		metrics.SetNodeInMaintenance(nm)
+	default:
+		metrics.ClearNodeInMaintenance(nm.Name)
+	}
 }
 
 func setLastUpdate(nm *v1beta1.NodeMaintenance) {

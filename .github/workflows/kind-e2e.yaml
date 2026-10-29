@@ -94,8 +94,9 @@ jobs:
           NMO_IMG=${IMAGE_REGISTRY}/node-maintenance-operator:latest
           NMO_BUNDLE=${IMAGE_REGISTRY}/node-maintenance-operator-bundle:latest
 
-          # 1. Update CSV with community metadata and local image references
-          make bundle-community IMG=${NMO_IMG}
+          # 1. Generate the Kubernetes bundle, without OpenShift only manifests like the console plugin
+          #    and monitoring resources, and update its CSV with community metadata and local image references
+          make bundle-community-k8s IMG=${NMO_IMG}
 
           # 2. Build images directly to avoid triggering 'make test' -> 'verify-unchanged'
           docker build -t ${NMO_IMG} .

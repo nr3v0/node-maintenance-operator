@@ -1,0 +1,28 @@
+# The platform monitoring resources are OpenShift only
+$patch: delete
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: node-maintenance-operator-controller-manager-metrics-monitor
+  namespace: node-maintenance-operator-system
+---
+$patch: delete
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: node-maintenance-operator-controller-manager-alerts
+  namespace: node-maintenance-operator-system
+---
+$patch: delete
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: node-maintenance-operator-prometheus-k8s
+  namespace: node-maintenance-operator-system
+---
+$patch: delete
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: node-maintenance-operator-prometheus-k8s
+  namespace: node-maintenance-operator-system

@@ -12,9 +12,13 @@ spec:
     - path: /metrics
       port: https
       scheme: https
+      # scrape faster than the platform default of 30s, so the NodeInMaintenance alert shows quickly
+      interval: 10s
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
         insecureSkipVerify: true
   selector:
     matchLabels:
       control-plane: controller-manager
+      # other medik8s operators in the same namespace use the control-plane label as well
+      node-maintenance-operator: ""

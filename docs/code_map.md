@@ -17,6 +17,8 @@ node-maintenance-operator/
 │   ├── groupversion_info.go
 │   └── zz_generated.deepcopy.go
 ├── internal/
+│   ├── metrics/
+│   │   └── metrics.go                   # nmo_node_in_maintenance gauge
 │   ├── controller/
 │   │   ├── nodemaintenance_controller.go # Reconcile, drainer, lease, status
 │   │   ├── taint.go                     # Maintenance taints JSON patch
@@ -27,7 +29,7 @@ node-maintenance-operator/
 ├── pkg/
 │   └── utils/                       # Events (events.go), OpenShift validator (validation.go)
 ├── version/
-└── config/                          # Manifests, bundle (OLM)
+└── config/                          # Manifests, bundle (OLM); prometheus/ has the NodeInMaintenance alert
 ```
 
 ## Where to look
@@ -42,6 +44,7 @@ node-maintenance-operator/
 | **OpenShift** detection | `pkg/utils/validation.go` (`NewOpenshiftValidator`) |
 | **Process flags** / TLS / leader ID / secured metrics | `cmd/main.go` |
 | **Version** logging | `version/version.go` |
+| **Metrics** / **NodeInMaintenance** alert | `internal/metrics/metrics.go`, `config/prometheus/prometheusrule.yaml` |
 
 ## API short name
 

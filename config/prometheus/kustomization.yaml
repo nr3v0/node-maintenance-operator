@@ -1,2 +1,5 @@
 resources:
 - monitor.yaml
+- prometheusrule.yaml
+- prometheus_role.yaml
+- prometheus_role_binding.yaml

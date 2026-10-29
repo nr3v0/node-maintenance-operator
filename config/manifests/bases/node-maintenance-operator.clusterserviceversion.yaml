@@ -9,8 +9,9 @@ metadata:
     createdAt: ""
     description: Node Maintenance Operator for cordoning and draining nodes.
     olm.skipRange: '>=0.12.0 <5.8.0'
+    operatorframework.io/cluster-monitoring: "true"
     operatorframework.io/suggested-namespace: openshift-workload-availability
-    operatorframework.io/suggested-namespace-template: '{"kind":"Namespace","apiVersion":"v1","metadata":{"name":"openshift-workload-availability","annotations":{"openshift.io/node-selector":""}}}'
+    operatorframework.io/suggested-namespace-template: '{"kind":"Namespace","apiVersion":"v1","metadata":{"name":"openshift-workload-availability","annotations":{"openshift.io/node-selector":""},"labels":{"openshift.io/cluster-monitoring":"true"}}}'
     repository: https://github.com/medik8s/node-maintenance-operator
     support: Medik8s
   name: node-maintenance-operator.v5.8.0

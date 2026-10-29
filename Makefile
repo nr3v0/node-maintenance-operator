@@ -424,6 +424,8 @@ bundle: verify-previous-version verify-skip-range ## Generate bundle manifests a
 
 .PHONY: bundle-k8s
 bundle-k8s: bundle # Generate bundle manifests and metadata for Kubernetes, then validate generated files.
+	# generate bundle doesn't remove files, so remove the OpenShift only manifests of the bundle target
+	rm -rf bundle/manifests
 	$(KUSTOMIZE) build config/manifests-k8s | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
 	$(MAKE) bundle-validate
 

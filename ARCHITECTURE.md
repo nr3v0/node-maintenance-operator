@@ -77,6 +77,16 @@ Maintenance applies **two** **NoSchedule** taints: **`node.kubernetes.io/unsched
 - **`onReconcileError` / `onReconcileErrorWithRequeue`:** set **`lastError`**, **`lastUpdate`**, refresh **pending** pod lists and **drainProgress** when **`nodeName` set**.
 - Special case: error text equals **`nodes "%s" not found`** → return **no error** (no infinite requeue).
 
+### Metrics (`internal/metrics/metrics.go`)
+
+- **`nmo_node_in_maintenance{node, nodemaintenance, reason}`** gauge, registered in the controller-runtime metrics registry (served on the secured metrics endpoint).
+- Set to **1** by a deferred **`updateNodeInMaintenanceMetric`** in **`Reconcile`** while the phase is **Running** / **Succeeded**; the CR's series are removed when the phase is **Failed**, the CR is being deleted, or not found. After an operator restart, the initial reconcile of every CR rebuilds the gauge.
+
+## Monitoring (`config/prometheus/`)
+
+- **ServiceMonitor** for the metrics Service, **PrometheusRule** with the **`NodeInMaintenance`** alert (**warning**, no **`for`** pending period, **10s** scrape and evaluation intervals so it fires within about 20s), and a Role / RoleBinding letting **`openshift-monitoring/prometheus-k8s`** discover the endpoints.
+- The CSV sets **`operatorframework.io/cluster-monitoring: "true"`** and the suggested namespace carries **`openshift.io/cluster-monitoring=true`**, so the OpenShift platform Prometheus evaluates the rule (alert source **Platform**). These resources are removed from the plain Kubernetes bundle (`config/manifests-k8s`).
+
 ## Lease constants (`internal/controller/nodemaintenance_controller.go`)
 
 - **`LeaseHolderIdentity`:** **`node-maintenance`**
