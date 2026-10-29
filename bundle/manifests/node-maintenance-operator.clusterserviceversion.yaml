@@ -387,6 +387,25 @@ spec:
     containerPort: 443
     deploymentName: node-maintenance-operator-controller-manager
     failurePolicy: Fail
+    generateName: mnodemaintenance.kb.io
+    rules:
+    - apiGroups:
+      - nodemaintenance.medik8s.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      resources:
+      - nodemaintenances
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-nodemaintenance-medik8s-io-v1beta1-nodemaintenance
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: node-maintenance-operator-controller-manager
+    failurePolicy: Fail
     generateName: vnodemaintenance.kb.io
     rules:
     - apiGroups:

@@ -25,7 +25,7 @@ node-maintenance-operator/
 │   │   ├── utils.go                     # Controller-local helpers (string/pod-list helpers)
 │   │   └── *_test.go
 │   └── webhook/v1beta1/
-│       └── nodemaintenance_webhook.go   # Validating webhook (create/update/delete)
+│       └── nodemaintenance_webhook.go   # Mutating (created-by) and validating webhooks
 ├── pkg/
 │   └── utils/                       # Events (events.go), OpenShift validator (validation.go)
 ├── version/

@@ -23,6 +23,7 @@ import (
 	"github.com/medik8s/common/pkg/etcd"
 	"github.com/medik8s/common/pkg/nodes"
 
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,6 +41,7 @@ const (
 	errorNodeMaintenanceExists       = "invalid nodeName, a NodeMaintenance for node %s already exists"
 	errorControlPlaneQuorumViolation = "can not put master/control-plane node into maintenance at this moment, disrupting node %s will violate etcd quorum"
 	errorNodeNameUpdateForbidden     = "updating spec.NodeName isn't allowed"
+	errorCreatedByUpdateForbidden    = "updating the " + nodemaintenancev1beta1.CreatedByAnnotation + " annotation isn't allowed"
 )
 
 const (
@@ -55,11 +57,36 @@ var nodemaintenancelog = logf.Log.WithName("nodemaintenance-resource")
 
 func SetupNodeMaintenanceWebhookWithManager(isOpenShift bool, mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, &nodemaintenancev1beta1.NodeMaintenance{}).
+		WithDefaulter(&nodeMaintenanceDefaulter{}).
 		WithValidator(&nodeMaintenanceValidator{
 			client:      mgr.GetClient(),
 			isOpenShift: isOpenShift,
 		}).
 		Complete()
+}
+
+//+kubebuilder:webhook:path=/mutate-nodemaintenance-medik8s-io-v1beta1-nodemaintenance,mutating=true,failurePolicy=fail,sideEffects=None,groups=nodemaintenance.medik8s.io,resources=nodemaintenances,verbs=create,versions=v1beta1,name=mnodemaintenance.kb.io,admissionReviewVersions=v1
+
+// nodeMaintenanceDefaulter records the user who creates a NodeMaintenance
+type nodeMaintenanceDefaulter struct{}
+
+var _ admission.Defaulter[*nodemaintenancev1beta1.NodeMaintenance] = &nodeMaintenanceDefaulter{}
+
+// Default sets the created-by annotation to the requesting user, overwriting any value set by the client
+func (d *nodeMaintenanceDefaulter) Default(ctx context.Context, nm *nodemaintenancev1beta1.NodeMaintenance) error {
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		return fmt.Errorf("could not get the admission request for recording the creator: %w", err)
+	}
+	if req.Operation != admissionv1.Create {
+		return nil
+	}
+	if nm.Annotations == nil {
+		nm.Annotations = map[string]string{}
+	}
+	nm.Annotations[nodemaintenancev1beta1.CreatedByAnnotation] = req.UserInfo.Username
+	nodemaintenancelog.Info("recording creator", "name", nm.Name, "user", req.UserInfo.Username)
+	return nil
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -104,6 +131,11 @@ func (v *nodeMaintenanceValidator) ValidateUpdate(_ context.Context, nmOld, nmNe
 	if nmNew.Spec.NodeName != nmOld.Spec.NodeName {
 		nodemaintenancelog.Info("validation failed", "error", errorNodeNameUpdateForbidden)
 		return nil, fmt.Errorf(errorNodeNameUpdateForbidden)
+	}
+	// Validate that the creator wasn't changed or removed
+	if nmNew.Annotations[nodemaintenancev1beta1.CreatedByAnnotation] != nmOld.Annotations[nodemaintenancev1beta1.CreatedByAnnotation] {
+		nodemaintenancelog.Info("validation failed", "error", errorCreatedByUpdateForbidden)
+		return nil, fmt.Errorf(errorCreatedByUpdateForbidden)
 	}
 	return nil, nil
 }

@@ -8,7 +8,7 @@ NMO is **not** a generic “cluster upgrade” tool; it reconciles one **cluster
 
 ## How it works
 
-1. You create a **`NodeMaintenance`** with **`spec.nodeName`** (and optional **`reason`**). Admission checks the node exists, that **no other** **`NodeMaintenance`** already targets that node, and (on **OpenShift**) that putting a **control-plane** node into maintenance would not violate **etcd** disruption rules.
+1. You create a **`NodeMaintenance`** with **`spec.nodeName`** (and optional **`reason`**). A mutating webhook records you as the creator in the **`nodemaintenance.medik8s.io/created-by`** annotation. Admission checks the node exists, that **no other** **`NodeMaintenance`** already targets that node, and (on **OpenShift**) that putting a **control-plane** node into maintenance would not violate **etcd** disruption rules.
 2. The reconciler adds a **finalizer**, records **BeginMaintenance**, initializes **status** (pod counts, **Running** phase), then:
    - Requests a **coordination lease** held as identity **`node-maintenance`** (duration **1 hour** in code).
    - Patches the **exclude-from-remediation** label on the node.

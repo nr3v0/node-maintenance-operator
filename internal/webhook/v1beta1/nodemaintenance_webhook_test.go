@@ -269,6 +269,67 @@ var _ = Describe("NodeMaintenance Validation", func() {
 			})
 
 		})
+
+		Context("with a changed or removed creator", func() {
+
+			var node *corev1.Node
+
+			BeforeEach(func() {
+				node = getTestNode(existingNodeName, false)
+				Expect(k8sClient.Create(context.Background(), node)).To(Succeed())
+			})
+
+			AfterEach(func() {
+				Expect(k8sClient.Delete(context.Background(), node)).To(Succeed())
+			})
+
+			It("should be rejected", func() {
+				nm := getTestNMO(existingNodeName)
+				Expect(k8sClient.Create(context.Background(), nm)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, context.Background(), nm)
+
+				By("changing the creator")
+				changed := nm.DeepCopy()
+				changed.Annotations[nodemaintenancev1beta1.CreatedByAnnotation] = "someone-else"
+				err := k8sClient.Update(context.Background(), changed)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(errorCreatedByUpdateForbidden))
+
+				By("removing the creator")
+				removed := nm.DeepCopy()
+				delete(removed.Annotations, nodemaintenancev1beta1.CreatedByAnnotation)
+				err = k8sClient.Update(context.Background(), removed)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(errorCreatedByUpdateForbidden))
+
+				By("updating other fields")
+				nm.Spec.Reason = "new reason"
+				Expect(k8sClient.Update(context.Background(), nm)).To(Succeed())
+			})
+		})
+	})
+
+	Describe("recording the creator", func() {
+
+		var node *corev1.Node
+
+		BeforeEach(func() {
+			node = getTestNode(existingNodeName, false)
+			Expect(k8sClient.Create(context.Background(), node)).To(Succeed())
+			DeferCleanup(k8sClient.Delete, context.Background(), node)
+		})
+
+		It("should set the created-by annotation to the requesting user, also if the client set it", func() {
+			nm := getTestNMO(existingNodeName)
+			nm.Annotations = map[string]string{nodemaintenancev1beta1.CreatedByAnnotation: "spoofed-user"}
+			Expect(k8sClient.Create(context.Background(), nm)).To(Succeed())
+			DeferCleanup(k8sClient.Delete, context.Background(), nm)
+
+			// envtest's admin user
+			createdBy := nm.Annotations[nodemaintenancev1beta1.CreatedByAnnotation]
+			Expect(createdBy).NotTo(BeEmpty())
+			Expect(createdBy).NotTo(Equal("spoofed-user"))
+		})
 	})
 })
 

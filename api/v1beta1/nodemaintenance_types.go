@@ -26,6 +26,10 @@ import (
 const (
 	// NodeMaintenanceFinalizer is a finalizer for a NodeMaintenance CR deletion
 	NodeMaintenanceFinalizer string = "foregroundDeleteNodeMaintenance"
+
+	// CreatedByAnnotation holds the name of the user who created the NodeMaintenance.
+	// It is set by the mutating webhook on creation and can't be changed afterwards.
+	CreatedByAnnotation string = "nodemaintenance.medik8s.io/created-by"
 )
 
 // MaintenancePhase contains the phase of maintenance

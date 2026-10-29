@@ -8,7 +8,7 @@ Commands and fields for **NodeMaintenance** day-2 ops. Behaviour details: **`../
 
 | Piece | Role |
 |-------|------|
-| **Operator deployment** | Reconciles **`NodeMaintenance`**, serves **validating webhook**. |
+| **Operator deployment** | Reconciles **`NodeMaintenance`**, serves the **mutating** and **validating webhooks**. |
 | **CRD** | **`nodemaintenance.medik8s.io/v1beta1`**, kind **`NodeMaintenance`**, short **`nm`**, **cluster-scoped**. |
 
 ## Operator process (observability)
@@ -49,6 +49,7 @@ kubectl get node <nodeName> -o jsonpath='{.spec.taints}{"\n"}{.metadata.labels.r
 | Area | Look for |
 |------|----------|
 | **`spec.nodeName`**, **`reason`** | Target and intent. |
+| **`nodemaintenance.medik8s.io/created-by`** annotation | User who created the CR, set by the mutating webhook; can't be changed. |
 | **`status.phase`** | **Running** → **Succeeded** or **Failed**. |
 | **`status.drainProgress`** | Progress during eviction retries. |
 | **`status.pendingPods` / `pendingPodsRefs`** | Work still on the node. |
@@ -115,7 +116,7 @@ If the alert doesn't fire on OpenShift, check that the operator namespace has th
 
 ## Debugging checklist
 
-1. **Webhook** blocking create? — node exists, no duplicate **nm**, OpenShift **etcd** guard for masters.  
+1. **Webhook** blocking create? — node exists, no duplicate **nm**, OpenShift **etcd** guard for masters. Both webhooks (mutating + validating) fail closed, so a down operator blocks creating **nm**.  
 2. **Lease** errors? — **`leases.coordination.k8s.io`**, competing operators.  
 3. **Drain** looping? — PDBs, **forbidden** evictions, terminating pods, **30s** timeout.  
 4. **Stuck terminating CR?** — Operator logs, finalizer, RBAC **update** on **NodeMaintenance**.  

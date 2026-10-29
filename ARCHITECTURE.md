@@ -15,14 +15,18 @@ Runtime behaviour of **Node Maintenance Operator**: **`NodeMaintenance`** reconc
 - **Status:** **`phase`** — **`Running`**, **`Succeeded`**, **`Failed`**; **`drainProgress`** (0–100 after first error path); **`lastUpdate`**, **`lastError`**; **`pendingPods`**, **`pendingPodsRefs`**; **`totalpods`**, **`evictionPods`**; **`errorOnLeaseCount`**
 - **Finalizer:** **`foregroundDeleteNodeMaintenance`** (`NodeMaintenanceFinalizer` constant)
 
-## Validating webhook (`internal/webhook/v1beta1/nodemaintenance_webhook.go`)
+## Webhooks (`internal/webhook/v1beta1/nodemaintenance_webhook.go`)
+
+- **Mutating (create only):** **`nodeMaintenanceDefaulter`** sets the **`nodemaintenance.medik8s.io/created-by`** annotation (**`v1beta1.CreatedByAnnotation`**) to the admission request's **`userInfo.username`**, overwriting any client-provided value. Kubernetes doesn't record an object's creator, so this is the only place to capture it.
+
+Validating:
 
 - **Create**
   - Node with **`spec.nodeName`** must exist.
   - No other **`NodeMaintenance`** may reference the same **`nodeName`**.
   - On **OpenShift** (`isOpenShift` from **`utils.NewOpenshiftValidator`** in **`cmd/main.go`**), if the node is **control-plane**, **`etcd.IsEtcdDisruptionAllowed`** must allow disruption (uses **etcd** guard PDB logic in **`openshift-etcd`** namespace — **etcd-guard-pdb** / **etcd-quorum-guard** naming in webhook constants).
 - **Non-OpenShift:** control-plane **quorum** webhook check is **skipped** (log notes no etcd PDB).
-- **Update:** changing **`spec.nodeName`** is **forbidden**.
+- **Update:** changing **`spec.nodeName`** is **forbidden**, and so is changing or removing the **created-by** annotation.
 - **Delete:** the Go type implements **`ValidateDelete`** (logs only, returns no error) to satisfy the **`webhook.CustomValidator`** interface, but the **`+kubebuilder:webhook`** marker only registers **`verbs=create;update`**—confirmed in the generated **`config/webhook/manifests.yaml`**, whose **`operations`** list is **`CREATE`**/**`UPDATE`** only. **Delete requests are never sent to the webhook**; this validator exists in code but is not wired up.
 
 ## Operator startup (`cmd/main.go`)
