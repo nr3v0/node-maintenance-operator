@@ -31,13 +31,14 @@ Validating:
 
 ## Operator startup (`cmd/main.go`)
 
-- **Scheme:** core + **`api/v1beta1`** + OpenShift **`config.openshift.io/v1`** (needed to read the cluster's API server TLS profile)
+- **Scheme:** core + **`api/v1beta1`** + OpenShift **`config.openshift.io/v1`** (needed to read the cluster's API server TLS profile) + **`console.openshift.io/v1`** (console plugin)
 - **OpenShift TLS profile:** at startup, **`openshifttls.FetchAPIServerTLSProfile`** probes for the OpenShift `APIServer` config; if absent (non-OpenShift, e.g. `NoMatch`/`NotFound`), falls back to default Go TLS settings. When present, the profile's cipher/version settings are applied to **both** the metrics server and the webhook server TLS options, and a **`SecurityProfileWatcher`** runnable is added that **restarts the process** (cancels the manager context) if the profile changes at runtime.
 - **Manager:** **Webhook** server (`webhook.NewServer(webhookOpts)`) — cert dir set to **`/apiserver.local.config/certificates`** only when OLM has injected certs there (`configureWebhookOpts`); **HTTP/2** disabled by default (forces `http/1.1`) for CVE mitigation, re-enabled via **`--enable-http2`**.
 - **Leader election:** **`--leader-elect`** (default **false** in source), **`LeaderElectionID`:** **`135b1886.medik8s.io`**
 - **Runnable:** **`leaseManagerInitializer`** calls **`lease.NewManager`** with **`controller.LeaseHolderIdentity`** (**`node-maintenance`**) after start
 - **Probes:** **`--health-probe-bind-address`** (default **`:8081`**)
 - **Metrics:** **`--metrics-bind-address`** (default **`:8443`**, flag name unchanged); manager `Metrics` **is** wired via `metrics/server.Options{BindAddress, SecureServing: true, FilterProvider: filters.WithAuthenticationAndAuthorization, TLSOpts}` — same secured-metrics pattern (TLS + Kubernetes bearer-token authn/authz) used by NHC and SNR.
+- **Console plugin (OpenShift only):** **`console.CreateOrUpdatePlugin`** (`internal/console/plugin.go`) creates / updates the **`node-maintenance-console-plugin`** **`ConsolePlugin`**, pointing at the plugin Service in **`OPERATOR_NAMESPACE`**. Failures are logged, not fatal. The plugin's Deployment and Service ship in the bundle (`config/optional/console-plugin`); OLM doesn't support **`ConsolePlugin`** bundle objects.
 - **Webhook registration:** **`webhookv1beta1.SetupNodeMaintenanceWebhookWithManager(isOpenShift, mgr)`** (package `internal/webhook/v1beta1`, not a method on the CR type)
 
 ## NodeMaintenance reconciler (`internal/controller/nodemaintenance_controller.go`)
@@ -86,10 +87,21 @@ Maintenance applies **two** **NoSchedule** taints: **`node.kubernetes.io/unsched
 - **`nmo_node_in_maintenance{node, nodemaintenance, reason}`** gauge, registered in the controller-runtime metrics registry (served on the secured metrics endpoint).
 - Set to **1** by a deferred **`updateNodeInMaintenanceMetric`** in **`Reconcile`** while the phase is **Running** / **Succeeded**; the CR's series are removed when the phase is **Failed**, the CR is being deleted, or not found. After an operator restart, the initial reconcile of every CR rebuilds the gauge.
 
+### Maintenance history (`internal/history/history.go`)
+
+- Ending a maintenance deletes its CR, so on deletion (after uncordoning) the reconciler appends a **`Record`** (name, UID, reason, **created-by** user, start / end time, last phase, drain progress, last error) to the ConfigMap **`node-maintenance-history-<node>`** in **`OPERATOR_NAMESPACE`**, newest first, at most **20** per node. A retried reconcile replaces the record of the same CR UID.
+- The ConfigMap is owned by the **Node**, so it is garbage collected with the node. Best effort: failures are logged and never block removing the finalizer. It uses the clientset (no ConfigMap informer) and the leader election Role's ConfigMap permissions.
+
 ## Monitoring (`config/prometheus/`)
 
 - **ServiceMonitor** for the metrics Service, **PrometheusRule** with the **`NodeInMaintenance`** alert (**warning**, no **`for`** pending period, **10s** scrape and evaluation intervals so it fires within about 20s), and a Role / RoleBinding letting **`openshift-monitoring/prometheus-k8s`** discover the endpoints.
 - The CSV sets **`operatorframework.io/cluster-monitoring: "true"`** and the suggested namespace carries **`openshift.io/cluster-monitoring=true`**, so the OpenShift platform Prometheus evaluates the rule (alert source **Platform**). These resources are removed from the plain Kubernetes bundle (`config/manifests-k8s`).
+
+## Console plugin (`console-plugin/`)
+
+- OpenShift Console dynamic plugin (SDK **4.19**, OCP **4.19+**) contributing a **`console.node/status`** extension: nodes with a non-failed, non-deleted **`NodeMaintenance`** get the extra status **In Maintenance** in the Nodes list and on the Node details page; the popover shows the CR, reason, phase and drain progress.
+- **`console.tab/horizontalNav`** **Maintenances** tab on the Node details page: the active **`NodeMaintenance`** plus the recorded history, laid out like the node-reboot plugin's **Reboots** tab (PatternFly 6, so the plugin needs OCP **4.19+**). The plugin finds the operator namespace from the **`ConsolePlugin`** backend Service.
+- Image **`quay.io/medik8s/node-maintenance-console`**, built by **`make console-plugin-build`**, served by nginx on **9443** with the service CA serving cert.
 
 ## Lease constants (`internal/controller/nodemaintenance_controller.go`)
 

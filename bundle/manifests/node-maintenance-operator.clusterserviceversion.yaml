@@ -18,6 +18,7 @@ metadata:
       ]
     capabilities: Basic Install
     categories: OpenShift Optional
+    console.openshift.io/plugins: '["node-maintenance-console-plugin"]'
     containerImage: quay.io/medik8s/node-maintenance-operator:v5.8.0
     createdAt: ""
     description: Node Maintenance Operator for cordoning and draining nodes.
@@ -145,6 +146,17 @@ spec:
           - list
           - watch
         - apiGroups:
+          - console.openshift.io
+          resources:
+          - consoleplugins
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - coordination.k8s.io
           resources:
           - leases
@@ -216,6 +228,104 @@ spec:
           - create
         serviceAccountName: node-maintenance-operator-controller-manager
       deployments:
+      - label:
+          app.kubernetes.io/component: console-plugin
+          node-maintenance-operator: ""
+        name: node-maintenance-operator-console-plugin
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/component: console-plugin
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app.kubernetes.io/component: console-plugin
+            spec:
+              affinity:
+                nodeAffinity:
+                  preferredDuringSchedulingIgnoredDuringExecution:
+                  - preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/infra
+                        operator: Exists
+                    weight: 3
+                  - preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/master
+                        operator: Exists
+                    weight: 1
+                  - preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: Exists
+                    weight: 1
+              automountServiceAccountToken: false
+              containers:
+              - image: quay.io/medik8s/node-maintenance-console:v5.8.0
+                livenessProbe:
+                  periodSeconds: 10
+                  tcpSocket:
+                    port: 9443
+                  timeoutSeconds: 3
+                name: console-plugin
+                ports:
+                - containerPort: 9443
+                  name: nmc-server
+                  protocol: TCP
+                readinessProbe:
+                  periodSeconds: 5
+                  tcpSocket:
+                    port: 9443
+                  timeoutSeconds: 3
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 50Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                  readOnlyRootFilesystem: true
+                terminationMessagePolicy: FallbackToLogsOnError
+                volumeMounts:
+                - mountPath: /var/serving-cert
+                  name: plugin-serving-cert
+                  readOnly: true
+                - mountPath: /var/log/nginx
+                  name: nginx-log
+                - mountPath: /var/lib/nginx/tmp
+                  name: nginx-tmp
+                - mountPath: /run
+                  name: nginx-run
+              securityContext:
+                runAsNonRoot: true
+              tolerations:
+              - effect: NoSchedule
+                key: node-role.kubernetes.io/master
+                operator: Exists
+              - effect: NoSchedule
+                key: node-role.kubernetes.io/control-plane
+                operator: Exists
+              - effect: NoSchedule
+                key: node-role.kubernetes.io/infra
+                operator: Exists
+              - effect: NoExecute
+                key: node-role.kubernetes.io/infra
+                operator: Exists
+              volumes:
+              - name: plugin-serving-cert
+                secret:
+                  defaultMode: 420
+                  secretName: node-maintenance-console-plugin-cert
+              - emptyDir: {}
+                name: nginx-log
+              - emptyDir: {}
+                name: nginx-tmp
+              - emptyDir: {}
+                name: nginx-run
       - label:
           control-plane: controller-manager
           node-maintenance-operator: ""

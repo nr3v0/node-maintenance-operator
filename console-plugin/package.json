@@ -1,0 +1,56 @@
+{
+  "name": "node-maintenance-console-plugin",
+  "version": "0.0.1",
+  "description": "OpenShift Console plugin which shows nodes in maintenance by the Node Maintenance Operator",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/medik8s/node-maintenance-operator.git",
+    "directory": "console-plugin"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && NODE_ENV=production npm run webpack",
+    "build-dev": "npm run clean && npm run webpack",
+    "start": "npm run webpack -- serve --progress",
+    "lint": "eslint src --ext .ts,.tsx && tsc --noEmit",
+    "webpack": "node -r ts-node/register ./node_modules/.bin/webpack"
+  },
+  "devDependencies": {
+    "@openshift-console/dynamic-plugin-sdk": "4.19.1",
+    "@openshift-console/dynamic-plugin-sdk-webpack": "4.19.0",
+    "@patternfly/react-core": "^6.2.2",
+    "@patternfly/react-table": "^6.2.2",
+    "@types/node": "^18.0.0",
+    "@types/react": "^17.0.37",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "copy-webpack-plugin": "^6.4.1",
+    "eslint": "^8.10.0",
+    "eslint-plugin-react": "^7.29.1",
+    "i18next": "^21.10.0",
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1",
+    "react-i18next": "^11.7.3",
+    "ts-loader": "^9.3.1",
+    "ts-node": "^10.8.1",
+    "typescript": "^5.7.2",
+    "webpack": "5.75.0",
+    "webpack-cli": "^4.9.2",
+    "webpack-dev-server": "^4.7.4"
+  },
+  "consolePlugin": {
+    "name": "node-maintenance-console-plugin",
+    "version": "0.0.1",
+    "displayName": "Node Maintenance",
+    "description": "Shows nodes which are in maintenance by the Node Maintenance Operator",
+    "exposedModules": {
+      "nodeStatus": "./nodeStatus",
+      "maintenancesTab": "./maintenancesTab"
+    },
+    "dependencies": {
+      "@console/pluginAPI": ">=4.19.0-0"
+    }
+  }
+}

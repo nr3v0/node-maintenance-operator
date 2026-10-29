@@ -96,7 +96,9 @@ var _ = BeforeSuite(func() {
 		MgrConfig:    cfg,
 		LeaseManager: &mockLeaseManager{Manager: mockManager},
 		Recorder:     fakeRecorder,
-		logger:       ctrl.Log.WithName("unit test"),
+		// testNamespace is created by the tests
+		OperatorNamespace: testNamespace,
+		logger:            ctrl.Log.WithName("unit test"),
 	}
 	ctx, cancel = context.WithCancel(ctrl.SetupSignalHandler())
 	drainer, err = createDrainer(ctx, cfg)

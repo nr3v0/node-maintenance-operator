@@ -1,4 +1,18 @@
-# The platform monitoring resources are OpenShift only
+# The console plugin and the platform monitoring resources are OpenShift only
+$patch: delete
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-maintenance-operator-console-plugin
+  namespace: node-maintenance-operator-system
+---
+$patch: delete
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-maintenance-operator-console-plugin
+  namespace: node-maintenance-operator-system
+---
 $patch: delete
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

@@ -3,6 +3,7 @@
 resources:
 - bases/node-maintenance-operator.clusterserviceversion.yaml
 - ../default
+- ../optional/console-plugin
 - ../samples
 - ../scorecard
 

@@ -17,6 +17,10 @@ node-maintenance-operator/
 │   ├── groupversion_info.go
 │   └── zz_generated.deepcopy.go
 ├── internal/
+│   ├── console/
+│   │   └── plugin.go                    # ConsolePlugin create/update (OpenShift only)
+│   ├── history/
+│   │   └── history.go                   # Per node maintenance history ConfigMaps
 │   ├── metrics/
 │   │   └── metrics.go                   # nmo_node_in_maintenance gauge
 │   ├── controller/
@@ -28,6 +32,7 @@ node-maintenance-operator/
 │       └── nodemaintenance_webhook.go   # Mutating (created-by) and validating webhooks
 ├── pkg/
 │   └── utils/                       # Events (events.go), OpenShift validator (validation.go)
+├── console-plugin/                  # OpenShift Console plugin: "In Maintenance" node status
 ├── version/
 └── config/                          # Manifests, bundle (OLM); prometheus/ has the NodeInMaintenance alert
 ```
@@ -45,6 +50,8 @@ node-maintenance-operator/
 | **Process flags** / TLS / leader ID / secured metrics | `cmd/main.go` |
 | **Version** logging | `version/version.go` |
 | **Metrics** / **NodeInMaintenance** alert | `internal/metrics/metrics.go`, `config/prometheus/prometheusrule.yaml` |
+| **Console** "In Maintenance" node status | `console-plugin/src/nodeStatus.tsx`, `internal/console/plugin.go` |
+| **Maintenance history** / Node **Maintenances** tab | `internal/history/history.go`, `console-plugin/src/maintenancesTab.tsx` |
 
 ## API short name
 

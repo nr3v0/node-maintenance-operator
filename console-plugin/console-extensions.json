@@ -1,0 +1,40 @@
+[
+  {
+    "type": "console.node/status",
+    "properties": {
+      "title": "In Maintenance",
+      "resources": {
+        "nodeMaintenances": {
+          "groupVersionKind": {
+            "group": "nodemaintenance.medik8s.io",
+            "version": "v1beta1",
+            "kind": "NodeMaintenance"
+          },
+          "isList": true
+        }
+      },
+      "isActive": {
+        "$codeRef": "nodeStatus.isNodeInMaintenance"
+      },
+      "PopoverContent": {
+        "$codeRef": "nodeStatus.MaintenancePopover"
+      }
+    }
+  },
+  {
+    "type": "console.tab/horizontalNav",
+    "properties": {
+      "model": {
+        "version": "v1",
+        "kind": "Node"
+      },
+      "page": {
+        "name": "%plugin__node-maintenance-console-plugin~Maintenances%",
+        "href": "maintenances"
+      },
+      "component": {
+        "$codeRef": "maintenancesTab"
+      }
+    }
+  }
+]

@@ -114,6 +114,17 @@ oc get nm -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,REASON:.spec
 
 If the alert doesn't fire on OpenShift, check that the operator namespace has the **`openshift.io/cluster-monitoring=true`** label and that the **ServiceMonitor** target is up (**Observe → Targets**).
 
+## Console
+
+On OpenShift, the **node-maintenance-console-plugin** shows **In Maintenance** for nodes under maintenance (**Compute → Nodes** and the Node details page). The Node details page has a **Maintenances** tab with the active maintenance and the last **20** ended ones, read from the ConfigMap **`node-maintenance-history-<node>`** in the operator namespace:
+
+```bash
+oc get cm -n <operator-namespace> -l nodemaintenance.medik8s.io/history=true
+oc get cm -n <operator-namespace> node-maintenance-history-<nodeName> -o jsonpath='{.data.history}' | jq
+```
+
+If the plugin is missing, check that it is enabled (**`oc get consoles.operator.openshift.io cluster -o jsonpath='{.spec.plugins}'`**) and that its pod in the operator namespace is running.
+
 ## Debugging checklist
 
 1. **Webhook** blocking create? — node exists, no duplicate **nm**, OpenShift **etcd** guard for masters. Both webhooks (mutating + validating) fail closed, so a down operator blocks creating **nm**.  

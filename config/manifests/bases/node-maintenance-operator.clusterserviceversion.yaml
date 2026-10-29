@@ -5,6 +5,7 @@ metadata:
     alm-examples: '[]'
     capabilities: Basic Install
     categories: OpenShift Optional
+    console.openshift.io/plugins: '["node-maintenance-console-plugin"]'
     containerImage: quay.io/medik8s/node-maintenance-operator:v5.8.0
     createdAt: ""
     description: Node Maintenance Operator for cordoning and draining nodes.

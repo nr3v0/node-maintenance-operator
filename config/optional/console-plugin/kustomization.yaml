@@ -1,0 +1,20 @@
+# The console plugin is OpenShift only, and the ConsolePlugin resource isn't supported by OLM,
+# so it is created by the operator, see internal/console/plugin.go
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: node-maintenance-operator-system
+namePrefix: node-maintenance-operator-
+
+labels:
+- pairs:
+    node-maintenance-operator: ""
+
+resources:
+- service.yaml
+- deployment.yaml
+
+images:
+- name: console-plugin
+  newName: quay.io/medik8s/node-maintenance-console
+  newTag: v5.8.0

@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/medik8s/node-maintenance-operator/v5/api/v1beta1"
+	"github.com/medik8s/node-maintenance-operator/v5/internal/history"
 	"github.com/medik8s/node-maintenance-operator/v5/internal/metrics"
 	"github.com/medik8s/node-maintenance-operator/v5/pkg/utils"
 )
@@ -68,7 +69,9 @@ type NodeMaintenanceReconciler struct {
 	MgrConfig    *rest.Config
 	LeaseManager lease.Manager
 	Recorder     record.EventRecorder
-	logger       logr.Logger
+	// OperatorNamespace is the namespace of the maintenance history ConfigMaps, history is disabled when empty
+	OperatorNamespace string
+	logger            logr.Logger
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -144,6 +147,7 @@ func (r *NodeMaintenanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					return r.onReconcileError(ctx, nm, drainer, err)
 				}
 			}
+			r.recordMaintenanceHistory(ctx, drainer, nm)
 
 			// Remove finalizer
 			controllerutil.RemoveFinalizer(nm, v1beta1.NodeMaintenanceFinalizer)
@@ -429,6 +433,26 @@ func (r *NodeMaintenanceReconciler) stopNodeMaintenanceOnDeletion(ctx context.Co
 		return err
 	}
 	return r.stopNodeMaintenanceImp(ctx, drainer, node)
+}
+
+// recordMaintenanceHistory adds the ended maintenance to the node's maintenance history.
+// The history is best effort, failures are logged and don't block ending the maintenance.
+// The ConfigMaps are managed with the leader election Role's permissions in the operator namespace.
+func (r *NodeMaintenanceReconciler) recordMaintenanceHistory(ctx context.Context, drainer *drain.Helper, nm *v1beta1.NodeMaintenance) {
+	if r.OperatorNamespace == "" {
+		return
+	}
+	node, err := drainer.Client.CoreV1().Nodes().Get(ctx, nm.Spec.NodeName, metav1.GetOptions{})
+	if err != nil {
+		// a deleted node has no history
+		if !apiErrors.IsNotFound(err) {
+			r.logger.Error(err, "failed to get node for recording the maintenance history", "nodeName", nm.Spec.NodeName)
+		}
+		return
+	}
+	if err := history.RecordEnded(ctx, drainer.Client, r.OperatorNamespace, node, nm, time.Now()); err != nil {
+		r.logger.Error(err, "failed to record the maintenance history", "nodeName", nm.Spec.NodeName)
+	}
 }
 
 func (r *NodeMaintenanceReconciler) fetchNode(ctx context.Context, drainer *drain.Helper, nodeName string) (*corev1.Node, error) {

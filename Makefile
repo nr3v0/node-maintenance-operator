@@ -102,6 +102,10 @@ CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:$(IMAGE_TAG)
 # Image URL to use all building/pushing image targets
 IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 
+# Image URL of the console plugin, always released with the same tag as the operator
+CONSOLE_PLUGIN_IMAGE_BASE ?= $(IMAGE_REGISTRY)/node-maintenance-console
+CONSOLE_PLUGIN_IMG ?= $(CONSOLE_PLUGIN_IMAGE_BASE):$(IMAGE_TAG)
+
 # BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
 BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 
@@ -191,7 +195,7 @@ test: test-no-verify verify-unchanged ## Generate and format code, run tests, ge
 .PHONY: test-no-verify
 test-no-verify: go-verify manifests generate fmt fix-imports vet envtest ginkgo ## Generate and format code, and run tests
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path --bin-dir $(LOCALBIN))" \
-	$(GINKGO) -r --keep-going --randomize-all --require-suite --vv --coverprofile cover.out ./internal/controller/... ./internal/webhook/... ./api/... ./pkg/...
+	$(GINKGO) -r --keep-going --randomize-all --require-suite --vv --coverprofile cover.out ./internal/controller/... ./internal/webhook/... ./internal/console/... ./internal/history/... ./api/... ./pkg/...
 
 .PHONY: bundle-run
 bundle-run: operator-sdk ## Run bundle image. Default NS is "openshift-workload-availability", redefine OPERATOR_NAMESPACE to override it.
@@ -314,6 +318,14 @@ docker-build: test-no-verify ## Build docker image without rejecting intentional
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
+.PHONY: console-plugin-build
+console-plugin-build: ## Build the console plugin image.
+	$(CONTAINER_TOOL) build -t $(CONSOLE_PLUGIN_IMG) console-plugin
+
+.PHONY: console-plugin-push
+console-plugin-push: ## Push the console plugin image.
+	$(CONTAINER_TOOL) push $(CONSOLE_PLUGIN_IMG)
+
 ##@ Deployment
 
 ifndef ignore-not-found
@@ -419,6 +431,7 @@ bundle: verify-previous-version verify-skip-range ## Generate bundle manifests a
 	$(MAKE) manifests operator-sdk kustomize
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/optional/console-plugin && $(KUSTOMIZE) edit set image console-plugin=$(CONSOLE_PLUGIN_IMG)
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
 	$(MAKE) bundle-reset-date bundle-validate
 
@@ -540,17 +553,17 @@ verify-unchanged: bundle-reset ## Verify there are no un-committed changes
 .PHONY: container-build
 container-build: test ## Build containers
 	$(MAKE) bundle
-	$(MAKE) docker-build bundle-build
+	$(MAKE) docker-build console-plugin-build bundle-build
 
 .PHONY: bundle-build-community
 bundle-build-community: bundle-community-k8s ## Run bundle community changes in CSV, and then build the bundle image.
 	$(CONTAINER_TOOL) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: container-build-community
-container-build-community: docker-build bundle-build-community ## Build containers for community
+container-build-community: docker-build console-plugin-build bundle-build-community ## Build containers for community
 
 .PHONY: container-push
-container-push: docker-push bundle-push catalog-build catalog-push## Push containers (NOTE: catalog can't be build before bundle was pushed)
+container-push: docker-push console-plugin-push bundle-push catalog-build catalog-push## Push containers (NOTE: catalog can't be build before bundle was pushed)
 
 .PHONY: container-build-and-push-community
 container-build-and-push-community: container-build-community container-push ## Build four images, update CSV for community, and push all the images to Quay (docker, bundle, and catalog).

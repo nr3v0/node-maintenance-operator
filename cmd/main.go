@@ -47,9 +47,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	configv1 "github.com/openshift/api/config/v1"
+	consolev1 "github.com/openshift/api/console/v1"
 	openshifttls "github.com/openshift/controller-runtime-common/pkg/tls"
 
 	nodemaintenancev1beta1 "github.com/medik8s/node-maintenance-operator/v5/api/v1beta1"
+	"github.com/medik8s/node-maintenance-operator/v5/internal/console"
 	"github.com/medik8s/node-maintenance-operator/v5/internal/controller"
 	webhookv1beta1 "github.com/medik8s/node-maintenance-operator/v5/internal/webhook/v1beta1"
 	"github.com/medik8s/node-maintenance-operator/v5/pkg/utils"
@@ -62,6 +64,8 @@ const (
 	WebhookCertName = "apiserver.crt"
 	WebhookKeyName  = "apiserver.key"
 	operatorName    = "NodeMaintenance"
+	// OperatorNamespaceEnv is set by the operator Deployment, see config/default/manager_namespace_patch.yaml
+	OperatorNamespaceEnv = "OPERATOR_NAMESPACE"
 )
 
 var (
@@ -72,6 +76,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(configv1.Install(scheme))
+	utilruntime.Must(consolev1.Install(scheme))
 
 	utilruntime.Must(nodemaintenancev1beta1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
@@ -176,6 +181,7 @@ func main() {
 	isOpenShift := openshiftCheck.IsOpenshiftSupported()
 	if isOpenShift {
 		setupLog.Info("NMO was installed on Openshift cluster")
+		createConsolePlugin(setupClient)
 	}
 
 	if err = (&controller.NodeMaintenanceReconciler{
@@ -184,6 +190,8 @@ func main() {
 		MgrConfig:    mgr.GetConfig(),
 		LeaseManager: leaseManagerInitializer,
 		Recorder:     mgr.GetEventRecorderFor(operatorName),
+		// the operator namespace is set by the Deployment, see config/default/manager_namespace_patch.yaml
+		OperatorNamespace: os.Getenv(OperatorNamespaceEnv),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", operatorName)
 		os.Exit(1)
@@ -225,6 +233,21 @@ func main() {
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+}
+
+// createConsolePlugin creates the ConsolePlugin which shows nodes in maintenance in the OpenShift console.
+// Failures are not fatal, since the console is an optional OpenShift capability.
+func createConsolePlugin(cl client.Client) {
+	namespace := os.Getenv(OperatorNamespaceEnv)
+	if namespace == "" {
+		setupLog.Info("operator namespace is unknown, skipping console plugin creation", "env", OperatorNamespaceEnv)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := console.CreateOrUpdatePlugin(ctx, cl, namespace, setupLog); err != nil {
+		setupLog.Error(err, "failed to create or update the console plugin, nodes in maintenance won't be shown in the console")
 	}
 }
 

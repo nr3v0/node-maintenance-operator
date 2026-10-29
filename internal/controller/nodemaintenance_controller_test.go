@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/medik8s/node-maintenance-operator/v5/api/v1beta1"
+	"github.com/medik8s/node-maintenance-operator/v5/internal/history"
 	"github.com/medik8s/node-maintenance-operator/v5/internal/metrics"
 	utils "github.com/medik8s/node-maintenance-operator/v5/pkg/utils"
 )
@@ -251,6 +252,18 @@ var _ = Describe("Node Maintenance", func() {
 					return nodeInMaintenanceSeriesCount()
 				}, defaultTimeout, defaultInterval).Should(Equal(0))
 
+				By("Check the ended maintenance was added to the node's maintenance history")
+				cmName, _ := history.ConfigMapName(taintedNodeName)
+				Eventually(func(g Gomega) {
+					cm := &corev1.ConfigMap{}
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: cmName}, cm)).To(Succeed())
+					records, err := history.GetRecords(cm)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(records).NotTo(BeEmpty())
+					g.Expect(records[0].Name).To(Equal(nm.Name))
+					g.Expect(records[0].Reason).To(Equal(nm.Spec.Reason))
+					g.Expect(records[0].Phase).To(Equal(v1beta1.MaintenanceSucceeded))
+				}, defaultTimeout, defaultInterval).Should(Succeed())
 			})
 		})
 		When("nm CR is invalid for a missing node", func() {
